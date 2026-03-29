@@ -1,0 +1,29 @@
+dependencies:
+  idf:
+    source:
+      type: idf
+    version: 5.5.2
+  vgerwen/lcd1602:
+    component_hash: ea0c4eb9d677b8fea81794b9ec6d8e71557261effeebb11cc5a0695b6687ffdd
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.0
+  zorxx/dht:
+    component_hash: 5bac146b1e31cd739dba6e3edb791fac1052221ed2e38a30f8c575bee1e96c13
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.2
+direct_dependencies:
+- idf
+- vgerwen/lcd1602
+- zorxx/dht
+manifest_hash: 34e58a732b1f3ba845e954013f4a9f63dbe6b6e572aa58c7418999eb8202ae85
+target: esp32
+version: 2.0.0
