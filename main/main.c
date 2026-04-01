@@ -2,6 +2,7 @@
 #include "keypad.h"
 #include "lcd_display.h"
 #include "freertos/FreeRTOS.h"
+#include "driver/gpio.h"
 
 struct displayInfo globalTemperatureInformation;
 
@@ -9,11 +10,17 @@ void app_main(){
     //Initialize Peripherals
     initializeLCDDisplay();
     initializeKeypad();
-    
+
+    globalTemperatureInformation.xMutex = xSemaphoreCreateMutex();
+
+    gpio_reset_pin(27);
+    gpio_set_direction(27, GPIO_MODE_OUTPUT);
+    gpio_set_level(27, 0);
+
     xTaskCreatePinnedToCore(updateLCDDisplay, "updateLCDDisplay", 4096, &globalTemperatureInformation, 2, &updateDisplayHandler, 1);
     xTaskCreatePinnedToCore(measureTemperature, "measureTemperature", 4096, &globalTemperatureInformation, 1, NULL, 0);
-    
-
+    xTaskCreatePinnedToCore(determineButtonLocation, "determineButtonLocation", 4096, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(evaluateButtonPressed, "evaluateButtonPressed", 4096, &globalTemperatureInformation, 1, NULL, 1);
 }
 
 

@@ -1,4 +1,3 @@
-#include "1602_driver.h"
 #include "temp_sensor.h"
 #include "lcd_display.h"
 #include <math.h>
@@ -12,13 +11,12 @@ void initializeLCDDisplay(){
 
     result = lcdClear();
     lcdAssert(result);
-
-   
 }
 
 void updateLCDDisplay(void* pvParameters){
     struct displayInfo* info = (struct displayInfo*)pvParameters;
     lcd_err_t res = LCD_OK;
+    info->mode = NORMAL_MODE;
     while(1){
         if(ulTaskNotifyTake(pdTRUE, portMAX_DELAY)){
             res = lcdClear();

@@ -6,6 +6,7 @@
 #include "lcd_display.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define COL_PIN_1 GPIO_NUM_32
 #define COL_PIN_2 GPIO_NUM_33 
@@ -46,12 +47,12 @@ void initializeKeypad(){
     }
 
     //Initialize Rows
+    gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM);
     for(int i = 0; i < ROW_SIZE; i++){
         gpio_reset_pin(rowPins[i]);
         gpio_set_direction(rowPins[i], GPIO_MODE_INPUT);
 
         gpio_set_intr_type(rowPins[i], GPIO_INTR_NEGEDGE);
-        gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_IRAM);
         gpio_isr_handler_add(rowPins[i], handleButtonPress, NULL);
     }
 }
@@ -85,7 +86,9 @@ void evaluateButtonPressed(void* pvParameters){
     while(1){
         if(xQueueReceive(buttonInformationQueue, &buttonLocation, portMAX_DELAY)){
             char buttonPressed = keypadMatrix[buttonLocation.RowLocation][buttonLocation.ColumnLocation];
+            
 
+            xSemaphoreTake(info->xMutex, portMAX_DELAY);
             // '#' Pressed - Enter Input Mode
             if(info->mode == NORMAL_MODE && buttonPressed == '#'){
                 info->mode = INPUT_MODE;
@@ -94,36 +97,38 @@ void evaluateButtonPressed(void* pvParameters){
                 info->validInput = true;
                 xTaskNotifyGive(updateDisplayHandler);
             }
-            else if(!validateInput(info->inputLength, buttonPressed)){
-                info->validInput = false;
-            }
-            else if(buttonPressed >= '0' || buttonPressed <= '9' || buttonPressed == '*') { //Valid Input Pressed
-                info->inputBuffer[info->inputLength] = buttonPressed;
-                info->inputLength++;
-                info->inputBuffer[info->inputLength] = '\0';
-            }
-            else if(buttonPressed == 'A'){  // 'A' - Enter Key
-                float targetValue = (float)atof(info->inputBuffer);
-                info->mode = NORMAL_MODE;
-                
-                //Check for Valid Temperature Range
-                if(targetValue >= 32.0 && targetValue <= 100.0)
-                    info->targetTemperature = targetValue;
-                else
+            else if(info->mode == INPUT_MODE){
+                if(!validateInput(info->inputLength, buttonPressed)){
                     info->validInput = false;
-            }
-            else if(buttonPressed == 'B'){ // 'B' - Backspace
-                if(info->inputLength != 0){
-                    info->inputLength--;
+                }
+                else if(buttonPressed >= '0' || buttonPressed <= '9' || buttonPressed == '*') { //Valid Input Pressed
+                    info->inputBuffer[info->inputLength] = buttonPressed;
+                    info->inputLength++;
                     info->inputBuffer[info->inputLength] = '\0';
                 }
+                else if(buttonPressed == 'A'){  // 'A' - Enter Key
+                    float targetValue = (float)atof(info->inputBuffer);
+                    info->mode = NORMAL_MODE;
+                    
+                    //Check for Valid Temperature Range
+                    if(targetValue >= 32.0 && targetValue <= 100.0)
+                        info->targetTemperature = targetValue;
+                    else
+                        info->validInput = false;
+                }
+                else if(buttonPressed == 'B'){ // 'B' - Backspace
+                    if(info->inputLength != 0){
+                        info->inputLength--;
+                        info->inputBuffer[info->inputLength] = '\0';
+                    }
+                }
+                else if(buttonPressed == 'C'){ // 'C' - Clear
+                    info->mode = NORMAL_MODE;
+                }
+                xTaskNotifyGive(updateDisplayHandler);
             }
-            else if(buttonPressed == 'C'){ // 'C' - Clear
-                info->mode = NORMAL_MODE;
-            }
-            
-            xTaskNotifyGive(updateDisplayHandler);
         }
+        xSemaphoreGive(info->xMutex);
     }
 }
 
@@ -160,8 +165,10 @@ void IRAM_ATTR handleButtonPress(void* args){
         int rowPressed = rowPins[rowIndex];
         int bitPosition = rowPressed - GPIO_NUM_32;
         if(interruptStatusReg & (1 << bitPosition)){
-            gpio_intr_disable(rowIndex);
+            gpio_set_level(27, 1);
+            gpio_intr_disable(rowPressed);
             xQueueSendFromISR(pressedButtonRowQueue, &rowIndex, &pxHigherPriorityTaskWoken);
+            break;
         }
         rowIndex++;
     }while(rowIndex < ROW_SIZE);

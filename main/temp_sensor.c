@@ -21,15 +21,20 @@ void measureTemperature(void* pvParameters){
     float humidity = 0.0f;
     float currTemperature = 0.0f;
 
+    info->targetTemperature = 73.0f;
+    info->temperature = 0.0f;
     while(1){
         ESP_ERROR_CHECK(dht_read_float_data(DHT_SENSOR, DHT_PIN, &humidity, &currTemperature));
         convertCelsiusToFahrenheit(&currTemperature);
 
-        if(info->mode == NORMAL_MODE && fabs(currTemperature > info->temperature) >= .1){
+        xSemaphoreTake(info->xMutex, portMAX_DELAY);
+        if(info->mode == NORMAL_MODE && fabs(currTemperature - info->temperature) >= .1){
             info->temperature = currTemperature;
             xTaskNotifyGive(updateDisplayHandler);
         }   
+        xSemaphoreGive(info->xMutex);
         
+
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 } 
