@@ -23,18 +23,32 @@ void updateLCDDisplay(void* pvParameters){
             lcdAssert(res);
             sprintf(info->temperatureString, "Temp: %.1f F", info->temperature);
             lcdSetText(info->temperatureString, 0, 0);
+  
             
             if(info->mode == NORMAL_MODE){
                 sprintf(info->targetString, "Target: %.1f F", info->targetTemperature);
                 lcdSetText(info->targetString, 0, 1);
             }
             else{
-                if(info->inputLength == 0)
-                    lcdSetText("Target: ", 0, 1);
-                else{
-                    sprintf(info->targetString, "Target: %s", info->inputBuffer);
-                    lcdSetText(info->targetString, 0, 1);
-                }    
+                
+                /*
+                Display Invalid to User Error Input 
+                */
+                if(info->validInput == false){
+                    lcdSetText("Target: Invalid", 0, 1);
+                    vTaskDelay(2000/portTICK_PERIOD_MS);
+                    info->validInput = true;
+                    info->mode = NORMAL_MODE;
+                    xTaskNotifyGive(updateDisplayHandler);
+                }
+                else{   //Display User input 
+                    if(info->inputLength == 0)
+                        lcdSetText("Target: ", 0, 1);
+                    else{
+                        sprintf(info->targetString, "Target: %s", info->inputBuffer);
+                        lcdSetText(info->targetString, 0, 1);
+                    }    
+                }
             }
         }
     }

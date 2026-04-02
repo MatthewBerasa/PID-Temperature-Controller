@@ -1,8 +1,6 @@
 #include "driver/gpio.h"
 #include "keypad.h"
 #include "freertos/FreeRTOS.h"
-#include "soc/gpio_reg.h"
-#include "soc/soc.h"
 #include "lcd_display.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -53,7 +51,7 @@ void initializeKeypad(){
         gpio_set_direction(rowPins[i], GPIO_MODE_INPUT);
 
         gpio_set_intr_type(rowPins[i], GPIO_INTR_NEGEDGE);
-        gpio_isr_handler_add(rowPins[i], handleButtonPress, NULL);
+        gpio_isr_handler_add(rowPins[i], handleButtonPress, (void*) i);
     }
 }
 
@@ -74,7 +72,7 @@ void determineButtonLocation(void* pvParameters){
                 gpio_set_level(colPins[i], 0);
             }
             xQueueSend(buttonInformationQueue, &button, 0);
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(250));
             gpio_intr_enable(rowPins[button.RowLocation]);
         }
     }
@@ -101,29 +99,42 @@ void evaluateButtonPressed(void* pvParameters){
                 if(!validateInput(info->inputLength, buttonPressed)){
                     info->validInput = false;
                 }
-                else if(buttonPressed >= '0' || buttonPressed <= '9' || buttonPressed == '*') { //Valid Input Pressed
-                    info->inputBuffer[info->inputLength] = buttonPressed;
-                    info->inputLength++;
-                    info->inputBuffer[info->inputLength] = '\0';
-                }
-                else if(buttonPressed == 'A'){  // 'A' - Enter Key
-                    float targetValue = (float)atof(info->inputBuffer);
-                    info->mode = NORMAL_MODE;
-                    
-                    //Check for Valid Temperature Range
-                    if(targetValue >= 32.0 && targetValue <= 100.0)
-                        info->targetTemperature = targetValue;
-                    else
-                        info->validInput = false;
-                }
-                else if(buttonPressed == 'B'){ // 'B' - Backspace
-                    if(info->inputLength != 0){
-                        info->inputLength--;
-                        info->inputBuffer[info->inputLength] = '\0';
-                    }
-                }
-                else if(buttonPressed == 'C'){ // 'C' - Clear
-                    info->mode = NORMAL_MODE;
+                else{
+                    switch(buttonPressed){  
+                        case '*': { //Valid Decimal Pressed
+                            info->inputBuffer[info->inputLength] = '.';
+                            info->inputLength++;
+                            info->inputBuffer[info->inputLength] = '\0';
+                            break;
+                        }
+                        case 'A':{ //'A' - Enter Key
+                            float targetValue = (float)atof(info->inputBuffer);
+                            info->mode = NORMAL_MODE;
+                                                
+                            //Check for Valid Temperature Range
+                            if(targetValue >= 32.0 && targetValue <= 100.0)
+                                info->targetTemperature = targetValue;
+                            else
+                                info->validInput = false;
+                            break;
+                        }
+                        case 'B': { //'B' - Backspace
+                            if(info->inputLength != 0){
+                                info->inputLength--;
+                                info->inputBuffer[info->inputLength] = '\0';
+                            }       
+                            break;
+                        }
+                        case 'C': { // 'C' - Clear
+                            info->mode = NORMAL_MODE;
+                            break;
+                        }
+                        default: {  // Valid Digit Pressed
+                            info->inputBuffer[info->inputLength] = buttonPressed;
+                            info->inputLength++;
+                            info->inputBuffer[info->inputLength] = '\0';
+                        }
+                    };
                 }
                 xTaskNotifyGive(updateDisplayHandler);
             }
@@ -138,11 +149,13 @@ Make Sure Input is correct format
 Ex. 73.9
 */
 bool validateInput(int inputLength, char buttonPressed){
-    if(inputLength >= 4) //Error 1 Exceed Length
+    if(buttonPressed == 'B' || buttonPressed == 'C')
+        return true;
+    else if(inputLength >= 4 && buttonPressed != 'A' && buttonPressed != 'C') //Error 1 Exceed Length
         return false;
     else if(inputLength == 2 && buttonPressed != '*') //Error 2 Decimal Missing
         return false;
-    else if(buttonPressed == 'D') //Error 3 Invalid Character
+    else if(buttonPressed == 'D' || buttonPressed == '#') //Error 3 Invalid Character
         return false;
     else if((inputLength == 0 || inputLength == 1 || inputLength == 3) && (buttonPressed == '*')) //Error 4 Misplaced Decimal
         return false;
@@ -159,20 +172,10 @@ Checks which row the button pressed belongs to then sends to Queue
 */
 void IRAM_ATTR handleButtonPress(void* args){
     BaseType_t pxHigherPriorityTaskWoken = pdFALSE;
-    uint32_t interruptStatusReg = REG_READ(GPIO_STATUS1_REG);
-    int rowIndex = 0; 
-    do{
-        int rowPressed = rowPins[rowIndex];
-        int bitPosition = rowPressed - GPIO_NUM_32;
-        if(interruptStatusReg & (1 << bitPosition)){
-            gpio_set_level(27, 1);
-            gpio_intr_disable(rowPressed);
-            xQueueSendFromISR(pressedButtonRowQueue, &rowIndex, &pxHigherPriorityTaskWoken);
-            break;
-        }
-        rowIndex++;
-    }while(rowIndex < ROW_SIZE);
-
+    int rowPressed = (int)args;
+    gpio_intr_disable(rowPins[rowPressed]);
+    xQueueSendFromISR(pressedButtonRowQueue, &rowPressed, &pxHigherPriorityTaskWoken);
+    
     if(pxHigherPriorityTaskWoken == pdTRUE){
         portYIELD_FROM_ISR();
     }
