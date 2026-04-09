@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "temp_sensor.h"
 #include "lcd_display.h"
+#include "fan.h"
 #include <math.h>
 
 #define DHT_SENSOR DHT_TYPE_DHT11
@@ -28,6 +29,15 @@ void measureTemperature(void* pvParameters){
         convertCelsiusToFahrenheit(&currTemperature);
 
         xSemaphoreTake(info->xMutex, portMAX_DELAY);
+        //Toggle Fan
+        if(currFanStatus == OFF && currTemperature > info->targetTemperature){
+            xTaskNotifyGive(toggleFanHandler);
+        }
+        else if(currFanStatus == ON && currTemperature < info->targetTemperature){
+            xTaskNotifyGive(toggleFanHandler);
+        }
+
+        //Update Screen
         if(info->mode == NORMAL_MODE && fabs(currTemperature - info->temperature) >= .1){
             info->temperature = currTemperature;
             xTaskNotifyGive(updateDisplayHandler);

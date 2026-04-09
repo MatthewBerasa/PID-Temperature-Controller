@@ -1,4 +1,4 @@
-idf_component_register(SRCS "temp_sensor.c" "lcd_display.c" "keypad.c" "main.c"
+idf_component_register(SRCS "fan.c" "temp_sensor.c" "lcd_display.c" "keypad.c" "main.c"
                        PRIV_REQUIRES spi_flash
                        INCLUDE_DIRS ""
                        REQUIRES esp_driver_gpio
